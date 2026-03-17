@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Ledger Pro</title>
+    <style>
+        :root { --primary: #2c3e50; --accent: #27ae60; --danger: #e74c3c; --bg: #f8f9fa; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); margin: 0; padding: 15px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 600px; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+        
+        h1, h2 { text-align: center; color: var(--primary); margin-bottom: 15px; font-size: 1.4rem; }
+        .section { margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
+        
+        .controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 15px; }
+        input[type="text"] { flex: 1; min-width: 150px; padding: 10px; border: 1.5px solid #ddd; border-radius: 8px; }
+        
+        button { border: none; border-radius: 8px; padding: 10px 16px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .btn-main { background: var(--primary); color: white; }
+        .btn-sec { background: #edf2f7; color: var(--primary); }
+        .btn-add { background: var(--accent); color: white; }
+        .btn-danger { background: #fee2e2; color: var(--danger); }
+        button:active { transform: scale(0.95); }
+
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th { background: #f1f5f9; padding: 10px; border-radius: 4px; }
+        td { padding: 8px 4px; text-align: center; border-bottom: 1px solid #f1f5f9; }
+
+        .stepper { display: flex; align-items: center; justify-content: center; gap: 4px; }
+        .stepper button { padding: 4px 8px; border-radius: 4px; background: #e2e8f0; color: #475569; font-size: 1rem; }
+        .stepper input { width: 40px; text-align: center; border: none; font-weight: bold; font-size: 1rem; background: transparent; }
+
+        .match-badge { display: block; text-align: center; font-weight: bold; color: var(--primary); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+        .positive { color: var(--accent); font-weight: bold; }
+        .negative { color: var(--danger); font-weight: bold; }
+        #historyLog { max-height: 200px; overflow-y: auto; font-size: 0.85rem; padding: 10px; background: #fdfdfd; border-radius: 8px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🏆 Game Tracker</h1>
+
+    <div class="section">
+        <div class="controls">
+            <input type="text" id="playerName" placeholder="Player Name">
+            <button class="btn-add" onclick="addPlayer()">Add</button>
+        </div>
+        <div class="controls">
+            <button class="btn-main" onclick="showGameUI()">New Match</button>
+            <button class="btn-sec" onclick="exportToCSV()">Export</button>
+            <button class="btn-danger" onclick="clearSession()">Reset</button>
+        </div>
+    </div>
+
+    <div id="gameSection" class="section hidden">
+        <span class="match-badge" id="matchDisplay">Match #1</span>
+        <div class="controls">
+            <select id="p1Select" onchange="updateHeaders()"></select>
+            <select id="p2Select" onchange="updateHeaders()"></select>
+            <select id="p3Select" onchange="updateHeaders()"></select>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Round</th>
+                    <th id="h-p1">P1</th>
+                    <th id="h-p2">P2</th>
+                    <th id="h-p3">P3</th>
+                </tr>
+            </thead>
+            <tbody id="roundInputs"></tbody>
+        </table>
+        <div class="controls" style="margin-top:15px;">
+            <button class="btn-add" style="width: 100%;" onclick="submitMatch()">Submit Match Results</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Balances</h2>
+        <table id="balanceTable">
+            <thead><tr><th>Player</th><th>Balance</th></tr></thead>
+            <tbody id="balanceBody"></tbody>
+        </table>
+    </div>
+
+    <div>
+        <h2>History</h2>
+        <div id="historyLog"></div>
+    </div>
+</div>
+
+<script>
+    let players = JSON.parse(localStorage.getItem('players')) || {};
+    let history = JSON.parse(localStorage.getItem('history')) || [];
+
+    function save() {
+        localStorage.setItem('players', JSON.stringify(players));
+        localStorage.setItem('history', JSON.stringify(history));
+        renderBalance();
+        renderHistory();
+    }
+
+    function addPlayer() {
+        const name = document.getElementById('playerName').value.trim();
+        if (name && !players[name]) {
+            players[name] = 0;
+            document.getElementById('playerName').value = '';
+            save();
+        }
+    }
+
+    function updateHeaders() {
+        document.getElementById('h-p1').innerText = document.getElementById('p1Select').value;
+        document.getElementById('h-p2').innerText = document.getElementById('p2Select').value;
+        document.getElementById('h-p3').innerText = document.getElementById('p3Select').value;
+    }
+
+    // Step function now allows values below zero
+    function step(id, val) {
+        const el = document.getElementById(id);
+        let current = parseInt(el.value) || 0;
+        el.value = current + val; 
+    }
+
+    function showGameUI() {
+        const names = Object.keys(players);
+        if (names.length < 3) return alert("Add 3 players first!");
+        
+        document.getElementById('matchDisplay').innerText = `Match #${history.length + 1}`;
+        document.getElementById('gameSection').classList.remove('hidden');
+        
+        const selects = ['p1Select', 'p2Select', 'p3Select'];
+        selects.forEach((sId, idx) => {
+            const s = document.getElementById(sId);
+            s.innerHTML = '';
+            names.forEach(n => s.innerHTML += `<option value="${n}" ${idx==names.indexOf(n)?'selected':''}>${n}</option>`);
+        });
+
+        const tbody = document.getElementById('roundInputs');
+        tbody.innerHTML = '';
+        for(let r=1; r<=3; r++) {
+            let row = `<tr><td>R${r}</td>`;
+            for(let p=1; p<=3; p++) {
+                let id = `r${r}p${p}`;
+                row += `<td>
+                    <div class="stepper">
+                        <button onclick="step('${id}', -1)">-</button>
+                        <input type="number" id="${id}" value="0" readonly>
+                        <button onclick="step('${id}', 1)">+</button>
+                    </div>
+                </td>`;
+            }
+            tbody.innerHTML += row + `</tr>`;
+        }
+        updateHeaders();
+    }
+
+    function submitMatch() {
+        const pNames = [document.getElementById('p1Select').value, document.getElementById('p2Select').value, document.getElementById('p3Select').value];
+        if (new Set(pNames).size !== 3) return alert("Select unique players!");
+
+        let gameTotals = [0, 0, 0];
+        for (let r = 1; r <= 3; r++) {
+            let rSum = 0;
+            for (let p = 1; p <= 3; p++) {
+                let val = parseInt(document.getElementById(`r${r}p${p}`).value) || 0;
+                gameTotals[p-1] += val;
+                rSum += val;
+            }
+            if (rSum !== 5) return alert(`Round ${r} must sum to 5 points! (Currently: ${rSum})`);
+        }
+
+        let summary = `<strong>M#${history.length+1}:</strong> `;
+        pNames.forEach((name, i) => {
+            let diff = gameTotals[i] - 5;
+            players[name] += diff;
+            summary += `${name} (${gameTotals[i]}) [${diff>=0?'+':''}${diff}] | `;
+        });
+        
+        history.push(summary);
+        document.getElementById('gameSection').classList.add('hidden');
+        save();
+    }
+
+    function renderBalance() {
+        const body = document.getElementById('balanceBody');
+        body.innerHTML = '';
+        Object.keys(players).sort().forEach(n => {
+            let row = body.insertRow();
+            row.insertCell(0).innerText = n;
+            let c = row.insertCell(1);
+            c.innerText = players[n];
+            c.className = players[n] >= 0 ? 'positive' : 'negative';
+        });
+    }
+
+    function renderHistory() {
+        document.getElementById('historyLog').innerHTML = history.slice().reverse().map(h => `<div style="padding:5px 0; border-bottom:1px solid #eee">${h}</div>`).join('');
+    }
+
+    function exportToCSV() {
+        let csv = "Player,Balance\n" + Object.entries(players).map(e => e.join(",")).join("\n");
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'game_data.csv';
+        a.click();
+    }
+
+    function clearSession() {
+        if(confirm("Wipe all data? This cannot be undone.")) { players={}; history=[]; localStorage.clear(); save(); location.reload(); }
+    }
+
+    renderBalance(); renderHistory();
+</script>
+
+</body>
+</html>
