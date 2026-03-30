@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Ledger Pro - Ultra Visuals</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --primary: #2c3e50; --accent: #27ae60; --danger: #e74c3c; --bg: #f0f2f5; --timer: #34495e; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); margin: 0; padding: 10px; display: flex; justify-content: center; transition: background 0.2s; }
+        .container { width: 100%; max-width: 900px; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); z-index: 1; }
+        
+        .flash-active { background-color: var(--danger) !important; }
+        .flash-active .container { border: 2px solid white; }
+
+        h1, h2 { text-align: center; color: var(--primary); margin: 15px 0; font-size: 1.4rem; border-bottom: 2px solid #eee; padding-bottom: 5px; }
+        .section { margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
+        
+        /* Timer Style */
+        .timer-container { text-align: center; background: var(--timer); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
+        #display { font-family: monospace; font-size: 2.5rem; font-weight: bold; margin-bottom: 10px; display: block; color: #ecf0f1; }
+        .timer-controls { display: flex; gap: 5px; justify-content: center; margin-bottom: 10px; align-items: center; flex-wrap: wrap; }
+        .timer-btn { background: rgba(255,255,255,0.2); font-size: 0.8rem; padding: 6px 12px; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .timer-btn:hover { background: rgba(255,255,255,0.3); }
+        .timer-input { width: 50px; padding: 4px; border-radius: 4px; border: none; text-align: center; font-weight: bold; }
+        
+        #startStop { width: 80%; font-size: 1.3rem; padding: 12px; margin: 10px auto; background: var(--accent); display: block; text-transform: uppercase; }
+        #startStop.running { background: #f39c12; }
+
+        .controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 15px; }
+        input[type="text"] { flex: 1; min-width: 150px; padding: 10px; border: 1.5px solid #ddd; border-radius: 8px; }
+        button { border: none; border-radius: 8px; padding: 10px 16px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .btn-main { background: var(--primary); color: white; }
+        .btn-sec { background: #edf2f7; color: var(--primary); }
+        .btn-add { background: var(--accent); color: white; }
+        .btn-danger { background: #fee2e2; color: var(--danger); }
+        
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin: 10px 0; }
+        th { background: #f1f5f9; padding: 10px; }
+        td { padding: 8px 4px; text-align: center; border-bottom: 1px solid #eee; }
+        
+        .stepper { display: flex; align-items: center; justify-content: center; gap: 4px; }
+        .stepper button { padding: 4px 8px; border-radius: 4px; background: #e2e8f0; color: #475569; }
+        .stepper input { width: 40px; text-align: center; border: none; font-weight: bold; background: transparent; }
+        
+        .tally-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-top: 10px; text-align: center; }
+        
+        /* Grid for many charts */
+        .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-top: 20px; }
+        .chart-card { background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 10px; height: 250px; }
+        .hidden { display: none; }
+        .positive { color: var(--accent); font-weight: bold; }
+        .negative { color: var(--danger); font-weight: bold; }
+        #historyLog { max-height: 150px; overflow-y: auto; font-size: 0.85rem; padding: 10px; background: #fdfdfd; border: 1px solid #eee; border-radius: 8px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="timer-container">
+        <span id="display">00:00:00</span>
+        <div class="timer-controls">
+            <button class="timer-btn" onclick="addMinutes(1)">+1m</button>
+            <button class="timer-btn" onclick="addMinutes(5)">+5m</button>
+            <button class="timer-btn" onclick="addMinutes(10)">+10m</button>
+        </div>
+        <div class="timer-controls">
+            <button class="timer-btn" onclick="adjTimer(-5)">-5s</button>
+            <input type="number" id="setMins" class="timer-input" placeholder="Min">
+            <button class="timer-btn" onclick="adjTimer(5)">+5s</button>
+            <button class="timer-btn" onclick="setCountdown()">Set</button>
+        </div>
+        <button class="timer-btn" id="startStop" onclick="startStop()">Start</button>
+        <button class="timer-btn" onclick="resetTimer()">Reset Timer</button>
+    </div>
+
+    <h1>🏆 Game Tracker Pro</h1>
+
+    <div class="section">
+        <div class="controls">
+            <input type="text" id="playerName" placeholder="Player Name">
+            <button class="btn-add" onclick="addPlayer()">Add Player</button>
+        </div>
+        <div class="controls">
+            <button class="btn-main" onclick="showGameUI()">New Match</button>
+            <button class="btn-sec" onclick="exportToCSV()">Export</button>
+            <button class="btn-sec" onclick="document.getElementById('csvFileInput').click()">Import</button>
+            <input type="file" id="csvFileInput" class="hidden" accept=".csv" onchange="importCSV(event)">
+            <button class="btn-danger" onclick="clearSession()">Reset Data</button>
+        </div>
+    </div>
+
+    <div id="gameSection" class="section hidden">
+        <h2 id="matchDisplay">Active Match</h2>
+        <div class="controls">
+            <select id="p1S" onchange="updateMatchUI()"></select>
+            <select id="p2S" onchange="updateMatchUI()"></select>
+            <select id="p3S" onchange="updateMatchUI()"></select>
+        </div>
+        
+        <div class="chart-card" style="height: 300px; margin-bottom: 15px;">
+            <canvas id="matchChart"></canvas>
+        </div>
+
+        <h3 id="roundTitle" style="text-align:center">Round 1</h3>
+        <table>
+            <thead><tr><th id="h1">P1</th><th id="h2">P2</th><th id="h3">P3</th></tr></thead>
+            <tbody><tr>
+                <td><div class="stepper"><button onclick="step('v1',-1)">-</button><input type="number" id="v1" value="0" readonly><button onclick="step('v1',1)">+</button></div></td>
+                <td><div class="stepper"><button onclick="step('v2',-1)">-</button><input type="number" id="v2" value="0" readonly><button onclick="step('v2',1)">+</button></div></td>
+                <td><div class="stepper"><button onclick="step('v3',-1)">-</button><input type="number" id="v3" value="0" readonly><button onclick="step('v3',1)">+</button></div></td>
+            </tr></tbody>
+        </table>
+
+        <div class="tally-box">
+            <div><strong>Match Total:</strong> <span id="tallyText">0 | 0 | 0</span></div>
+            <div style="margin-top: 10px;">
+                <strong>Round-wise Scores:</strong>
+                <table style="font-size: 0.8rem; background: white;">
+                    <thead><tr><th>Round</th><th>P1</th><th>P2</th><th>P3</th></tr></thead>
+                    <tbody id="roundLogs"></tbody>
+                </table>
+            </div>
+        </div>
+        <button class="btn-add" style="width: 100%; margin-top: 15px;" id="roundBtn" onclick="submitRound()">Submit Round 1</button>
+    </div>
+
+    <div class="section">
+        <h2>📊 Analytics Dashboard</h2>
+        <div class="chart-grid">
+            <div class="chart-card"><canvas id="balanceChart"></canvas></div>
+            <div class="chart-card"><canvas id="pieChart"></canvas></div>
+            <div class="chart-card"><canvas id="trendChart"></canvas></div>
+            <div class="chart-card"><canvas id="radarChart"></canvas></div>
+            <div class="chart-card"><canvas id="polarChart"></canvas></div>
+            <div class="chart-card"><canvas id="bubbleChart"></canvas></div>
+            <div class="chart-card"><canvas id="scatterChart"></canvas></div>
+            <div class="chart-card"><canvas id="doughnutChart"></canvas></div>
+            <div class="chart-card"><canvas id="areaChart"></canvas></div>
+            <div class="chart-card"><canvas id="stackedBarChart"></canvas></div>
+            <div class="chart-card"><canvas id="horizontalBarChart"></canvas></div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Balances</h2>
+        <table><thead><tr><th>Player</th><th>Balance</th></tr></thead><tbody id="balanceBody"></tbody></table>
+    </div>
+    
+    <div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2>History</h2>
+            <button class="btn-sec" style="font-size: 0.7rem;" onclick="undoLastMatch()">Undo Match</button>
+        </div>
+        <div id="historyLog"></div>
+    </div>
+</div>
+
+<script>
+    let timer, totalSeconds = 0, isRunning = false, isCountdown = false;
+    let players = JSON.parse(localStorage.getItem('players')) || {};
+    let history = JSON.parse(localStorage.getItem('history')) || [];
+    let currentMatch = { pNames: [], round: 1, tally: [0, 0, 0], rounds: [] };
+    let chartObjects = {};
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function speakReminders(text) { if ('speechSynthesis' in window) window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)); }
+    function playBeep(freq, duration) {
+        const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination); osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.5, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+        osc.start(); osc.stop(audioCtx.currentTime + duration);
+    }
+    function playAlarm() { playBeep(880, 0.5); setTimeout(() => playBeep(880, 0.5), 600); setTimeout(() => { playBeep(880, 1.0); speakReminders("Time is up"); }, 1200); }
+
+    function formatTime(s) { let h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60; return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`; }
+    function adjTimer(v) { if(isRunning) return; totalSeconds = Math.max(0, totalSeconds + v); isCountdown = true; document.getElementById("display").innerText = formatTime(totalSeconds); }
+    function setCountdown() { let mins = parseInt(document.getElementById('setMins').value)||0; if(mins<=0) return; resetTimer(); totalSeconds = mins*60; isCountdown = true; document.getElementById("display").innerText = formatTime(totalSeconds); }
+    function addMinutes(m) { if(isRunning) return; isCountdown = true; totalSeconds += (m * 60); document.getElementById("display").innerText = formatTime(totalSeconds); }
+    function startStop() { 
+        if(audioCtx.state === 'suspended') audioCtx.resume(); 
+        const btn = document.getElementById("startStop");
+        if(!isRunning){ if(isCountdown && totalSeconds<=0) return; timer=setInterval(tick,1000); isRunning=true; btn.innerText="Pause"; btn.classList.add('running');
+        } else { clearInterval(timer); isRunning=false; btn.innerText="Start"; btn.classList.remove('running'); } 
+    }
+    function tick() { 
+        if(isCountdown){ 
+            totalSeconds--; 
+            if (totalSeconds === 60) speakReminders("One minute remaining");
+            else if (totalSeconds === 30) speakReminders("Thirty seconds remaining");
+            else if (totalSeconds <= 10 && totalSeconds > 0) speakReminders(totalSeconds.toString());
+            if(totalSeconds<=0){ clearInterval(timer); triggerFlash(); playAlarm(); totalSeconds=0; isRunning=false; resetTimer(); } 
+        } else { totalSeconds++; } 
+        document.getElementById("display").innerText = formatTime(totalSeconds); 
+    }
+    function triggerFlash() { let c=0, i=setInterval(()=>{ document.body.classList.toggle('flash-active'); if(++c>12){ clearInterval(i); document.body.classList.remove('flash-active'); }}, 150); }
+    function resetTimer() { clearInterval(timer); totalSeconds=0; isRunning=false; isCountdown=false; document.getElementById("display").innerText="00:00:00"; document.getElementById("startStop").innerText="Start"; document.getElementById("startStop").classList.remove('running'); }
+
+    function initCharts() {
+        const createChart = (id, type, label, bg) => {
+            return new Chart(document.getElementById(id), {
+                type: type, data: { labels: [], datasets: [{ label: label, data: [], backgroundColor: bg }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: label } } }
+            });
+        };
+        chartObjects.balance = createChart('balanceChart', 'bar', 'Current Balances', '#3498db');
+        chartObjects.pie = createChart('pieChart', 'pie', 'Wealth Share', ['#e74c3c','#27ae60','#f1c40f','#9b59b6','#3498db']);
+        chartObjects.trend = createChart('trendChart', 'line', 'Performance History', '#27ae60');
+        chartObjects.radar = createChart('radarChart', 'radar', 'Player Skill Radar', 'rgba(155, 89, 182, 0.2)');
+        chartObjects.polar = createChart('polarChart', 'polarArea', 'Round Consistency', ['#ff6384','#36a2eb','#cc65fe','#ffce56']);
+        chartObjects.bubble = createChart('bubbleChart', 'bubble', 'Match Density', '#e67e22');
+        chartObjects.scatter = createChart('scatterChart', 'scatter', 'Point Dispersion', '#1abc9c');
+        chartObjects.doughnut = createChart('doughnutChart', 'doughnut', 'Win/Loss Ratio', ['#2ecc71','#e74c3c']);
+        chartObjects.area = createChart('areaChart', 'line', 'Cumulative Flow', { fill: true, backgroundColor: 'rgba(52, 152, 219, 0.4)' });
+        chartObjects.stacked = createChart('stackedBarChart', 'bar', 'Match Contribution', '#95a5a6');
+        chartObjects.horizontal = createChart('horizontalBarChart', 'bar', 'Ranking', '#d35400');
+        
+        chartObjects.match = new Chart(document.getElementById('matchChart'), {
+            type: 'radar', data: { labels: ['P1', 'P2', 'P3'], datasets: [{ label: 'Current Match Points', data: [0,0,0], borderColor: '#27ae60' }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { r: { suggestMin: 0, suggestMax: 10 } } }
+        });
+    }
+
+    function updateCharts() {
+        const names = Object.keys(players).sort();
+        const vals = names.map(n => players[n]);
+        
+        chartObjects.balance.data.labels = names; chartObjects.balance.data.datasets[0].data = vals; chartObjects.balance.update();
+        chartObjects.pie.data.labels = names; chartObjects.pie.data.datasets[0].data = vals.map(v => Math.max(0, v)); chartObjects.pie.update();
+        chartObjects.radar.data.labels = names; chartObjects.radar.data.datasets[0].data = vals; chartObjects.radar.update();
+        chartObjects.polar.data.labels = names; chartObjects.polar.data.datasets[0].data = vals.map(v => Math.abs(v)); chartObjects.polar.update();
+        chartObjects.horizontal.data.labels = names; chartObjects.horizontal.data.datasets[0].data = vals; chartObjects.horizontal.options.indexAxis = 'y'; chartObjects.horizontal.update();
+        chartObjects.doughnut.data.labels = ['Winners', 'Losers']; chartObjects.doughnut.data.datasets[0].data = [vals.filter(v => v > 0).length, vals.filter(v => v < 0).length]; chartObjects.doughnut.update();
+
+        // Trend and Area Chart
+        chartObjects.trend.data.labels = history.map((_, i) => i + 1);
+        chartObjects.area.data.labels = history.map((_, i) => i + 1);
+        chartObjects.trend.data.datasets = names.map((name, idx) => ({
+            label: name, data: history.reduce((acc, curr) => { 
+                let prev = acc.length > 0 ? acc[acc.length - 1] : 0;
+                acc.push(prev + (curr.diffs[name] || 0)); return acc;
+            }, []), borderColor: `hsl(${idx * 70}, 70%, 50%)`, fill: false
+        }));
+        chartObjects.area.data.datasets = chartObjects.trend.data.datasets.map(d => ({...d, fill: true}));
+        chartObjects.trend.update(); chartObjects.area.update();
+
+        // Bubble and Scatter
+        chartObjects.bubble.data.datasets[0].data = vals.map((v, i) => ({ x: i, y: v, r: Math.abs(v) + 5 })); chartObjects.bubble.update();
+        chartObjects.scatter.data.datasets[0].data = vals.map((v, i) => ({ x: i, y: v })); chartObjects.scatter.update();
+        
+        // Stacked Bar
+        chartObjects.stacked.data.labels = history.slice(-5).map((_, i) => `Match ${history.length - 4 + i}`);
+        chartObjects.stacked.data.datasets = names.map((name, idx) => ({
+            label: name, data: history.slice(-5).map(h => h.diffs[name] || 0), backgroundColor: `hsl(${idx * 70}, 70%, 70%)`
+        }));
+        chartObjects.stacked.options.scales.x = { stacked: true }; chartObjects.stacked.options.scales.y = { stacked: true };
+        chartObjects.stacked.update();
+    }
+
+    function save() { localStorage.setItem('players', JSON.stringify(players)); localStorage.setItem('history', JSON.stringify(history)); renderBalance(); renderHistory(); updateCharts(); }
+    function addPlayer() { let n = document.getElementById('playerName').value.trim(); if(n && !players[n]){ players[n]=0; document.getElementById('playerName').value=''; save(); } }
+    function step(id, v) { let el = document.getElementById(id); el.value = (parseInt(el.value)||0) + v; }
+    
+    function showGameUI() {
+        let names = Object.keys(players); if(names.length < 3) return alert("Need 3 players!");
+        document.getElementById('gameSection').classList.remove('hidden');
+        currentMatch = { pNames: [], round: 1, tally: [0, 0, 0], rounds: [] };
+        document.getElementById('roundLogs').innerHTML = '';
+        ['p1S','p2S','p3S'].forEach((sId, i) => {
+            let s = document.getElementById(sId); s.innerHTML = '';
+            names.forEach(n => s.innerHTML += `<option value="${n}" ${i==names.indexOf(n)?'selected':''}>${n}</option>`);
+        });
+        updateMatchUI();
+    }
+
+    function updateMatchUI() {
+        currentMatch.pNames = [document.getElementById('p1S').value, document.getElementById('p2S').value, document.getElementById('p3S').value];
+        ['h1','h2','h3'].forEach((id, i) => document.getElementById(id).innerText = currentMatch.pNames[i]);
+        document.getElementById('roundTitle').innerText = `Round ${currentMatch.round}`;
+        document.getElementById('roundBtn').innerText = `Submit Round ${currentMatch.round}`;
+        document.getElementById('tallyText').innerText = currentMatch.tally.join(' | ');
+        document.getElementById('v1').value = 0; document.getElementById('v2').value = 0; document.getElementById('v3').value = 0;
+        chartObjects.match.data.labels = currentMatch.pNames;
+        chartObjects.match.data.datasets[0].data = currentMatch.tally;
+        chartObjects.match.update();
+    }
+
+    function submitRound() {
+        let v = [parseInt(document.getElementById('v1').value), parseInt(document.getElementById('v2').value), parseInt(document.getElementById('v3').value)];
+        if(v[0] + v[1] + v[2] !== 5) return alert("Round sum must be 5!");
+        
+        currentMatch.rounds.push([...v]);
+        v.forEach((s, i) => currentMatch.tally[i] += s);
+        
+        let tr = document.getElementById('roundLogs').insertRow();
+        tr.innerHTML = `<td>R${currentMatch.round}</td><td>${v[0]}</td><td>${v[1]}</td><td>${v[2]}</td>`;
+
+        if(currentMatch.round < 3) { currentMatch.round++; updateMatchUI(); } 
+        else { finishMatch(); }
+    }
+
+    function finishMatch() {
+        let diffs = {};
+        currentMatch.pNames.forEach((n, i) => { 
+            let d = currentMatch.tally[i] - 5; 
+            players[n] += d; diffs[n] = d; 
+        });
+        history.push({ log: `M#${history.length+1}: ${currentMatch.pNames.map((n,i)=>`${n}(${currentMatch.tally[i]})`).join(' ')}`, diffs: diffs });
+        speakReminders("Match finished. Balances updated.");
+        document.getElementById('gameSection').classList.add('hidden');
+        save();
+    }
+
+    function undoLastMatch() {
+        if(history.length === 0) return alert("Nothing to undo!");
+        let last = history.pop();
+        for(let n in last.diffs) players[n] -= last.diffs[n];
+        save();
+    }
+
+    function importCSV(e) {
+        let f = e.target.files[0]; if(!f) return;
+        let r = new FileReader(); r.onload = (ev) => {
+            ev.target.result.split('\n').forEach((l, i) => {
+                if(i==0 || !l.trim()) return;
+                let [n, b] = l.split(','); players[n.trim()] = parseInt(b);
+            });
+            save();
+        }; r.readAsText(f);
+    }
+    function renderBalance() {
+        let b = document.getElementById('balanceBody'); b.innerHTML = '';
+        Object.keys(players).sort().forEach(n => {
+            let r = b.insertRow(); r.insertCell(0).innerText = n;
+            let c = r.insertCell(1); c.innerText = players[n]; c.className = players[n]>=0?'positive':'negative';
+        });
+    }
+    function renderHistory() { document.getElementById('historyLog').innerHTML = history.slice().reverse().map(h => `<div style="padding:4px 0; border-bottom:1px solid #eee">${h.log}</div>`).join(''); }
+    function exportToCSV() { let csv = "Player,Balance\n" + Object.entries(players).map(e=>e.join(",")).join("\n"); let a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download = 'game_data.csv'; a.click(); }
+    function clearSession() { if(confirm("Clear everything?")) { players={}; history=[]; localStorage.clear(); save(); location.reload(); } }
+
+    initCharts(); renderBalance(); renderHistory(); updateCharts();
+</script>
+</body>
+</html>
